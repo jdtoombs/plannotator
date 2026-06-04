@@ -241,6 +241,7 @@ export async function startRebaseReviewBrowserSession(
 		gitRef: `rebase conflict ${current}`,
 		diffType: "uncommitted",
 		gitContext: undefined,
+		reviewMode: "rebase",
 		agentCwd: cwd,
 		htmlContent: reviewHtmlContent,
 		origin: "pi",

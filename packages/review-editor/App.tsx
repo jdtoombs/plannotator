@@ -57,6 +57,12 @@ import { useAnnotationFactory } from './hooks/useAnnotationFactory';
 import { DEMO_DIFF } from './demoData';
 import { exportReviewFeedback } from './utils/exportFeedback';
 import { ReviewSubmissionDialog, buildReviewSubmission, type ReviewSubmission, type SubmissionTarget } from './components/ReviewSubmissionDialog';
+import {
+  RebaseConflictView,
+  formatRebaseDecisionFeedback,
+  parseRebaseConflicts,
+  type RebaseConflictDecision,
+} from './components/RebaseConflictView';
 import { ReviewStateProvider, type ReviewState } from './dock/ReviewStateContext';
 import { JobLogsProvider } from './dock/JobLogsContext';
 import { reviewPanelComponents } from './dock/reviewPanelComponents';
@@ -95,6 +101,7 @@ interface DiffData {
   prStackInfo?: PRStackInfo | null;
   prDiffScope?: PRDiffScope;
   prDiffScopeOptions?: PRDiffScopeOption[];
+  reviewMode?: 'rebase';
 }
 
 // Simple diff parser to extract files from unified diff
@@ -140,6 +147,7 @@ const ReviewApp: React.FC = () => {
   const [files, setFiles] = useState<DiffFile[]>([]);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [annotations, setAnnotations] = useState<CodeAnnotation[]>([]);
+  const [rebaseDecisions, setRebaseDecisions] = useState<Record<string, RebaseConflictDecision>>({});
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [isAllFilesActive, setIsAllFilesActive] = useState(false);
   const [isDiffPanelActive, setIsDiffPanelActive] = useState(false);
@@ -818,6 +826,7 @@ const ReviewApp: React.FC = () => {
         prStackTree?: PRStackTree | null;
         prDiffScope?: PRDiffScope;
         prDiffScopeOptions?: PRDiffScopeOption[];
+        reviewMode?: 'rebase';
         platformUser?: string;
         viewedFiles?: string[];
         error?: string;
@@ -837,6 +846,7 @@ const ReviewApp: React.FC = () => {
           diffType: data.diffType,
           gitContext: data.gitContext,
           sharingEnabled: data.sharingEnabled,
+          reviewMode: data.reviewMode,
         });
         setFiles(apiFiles);
         if (data.origin) setOrigin(data.origin);
@@ -1516,15 +1526,31 @@ const ReviewApp: React.FC = () => {
     }
   }, [allAnnotations, prMetadata, feedbackDiffContext, prReviewScopeLabel]);
 
-  const feedbackMarkdown = useMemo(() => {
-    let output = exportReviewFeedback(allAnnotations, prMetadata, feedbackDiffContext, prReviewScopeLabel);
-    if (editorAnnotations.length > 0) {
-      output += exportEditorAnnotations(editorAnnotations);
-    }
-    return output;
-  }, [allAnnotations, prMetadata, feedbackDiffContext, prReviewScopeLabel, editorAnnotations]);
+  const rebaseConflicts = useMemo(
+    () => diffData?.reviewMode === 'rebase' ? parseRebaseConflicts(diffData.rawPatch) : [],
+    [diffData?.rawPatch, diffData?.reviewMode],
+  );
+  const rebaseDecisionCount = Object.keys(rebaseDecisions).length;
+  const rebaseDecisionMarkdown = useMemo(
+    () => formatRebaseDecisionFeedback(rebaseConflicts, rebaseDecisions),
+    [rebaseConflicts, rebaseDecisions],
+  );
+  const handleRebaseDecisionChange = useCallback((conflictId: string, decision: RebaseConflictDecision) => {
+    setRebaseDecisions((prev) => ({ ...prev, [conflictId]: decision }));
+  }, []);
 
-  const totalAnnotationCount = allAnnotations.length + editorAnnotations.length;
+  const feedbackMarkdown = useMemo(() => {
+    const parts: string[] = [];
+    const reviewFeedback = exportReviewFeedback(allAnnotations, prMetadata, feedbackDiffContext, prReviewScopeLabel);
+    if (reviewFeedback.trim()) parts.push(reviewFeedback);
+    if (rebaseDecisionMarkdown.trim()) parts.push(rebaseDecisionMarkdown);
+    if (editorAnnotations.length > 0) {
+      parts.push(exportEditorAnnotations(editorAnnotations));
+    }
+    return parts.join('\n\n');
+  }, [allAnnotations, prMetadata, feedbackDiffContext, prReviewScopeLabel, editorAnnotations, rebaseDecisionMarkdown]);
+
+  const totalAnnotationCount = allAnnotations.length + editorAnnotations.length + rebaseDecisionCount;
 
   // Send feedback to OpenCode via API
   const handleSendFeedback = useCallback(async () => {
@@ -2231,7 +2257,13 @@ const ReviewApp: React.FC = () => {
               cancelText="Dismiss"
               showCancel
             />
-            {files.length > 0 ? (
+            {diffData?.reviewMode === 'rebase' ? (
+              <RebaseConflictView
+                conflicts={rebaseConflicts}
+                decisions={rebaseDecisions}
+                onDecisionChange={handleRebaseDecisionChange}
+              />
+            ) : files.length > 0 ? (
               <DockviewReact
                 className={`h-full ${resolvedMode === 'light' ? 'dockview-theme-light' : 'dockview-theme-dark'}`}
                 components={reviewPanelComponents}

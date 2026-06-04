@@ -181,6 +181,8 @@ export async function startReviewServer(options: {
 	shareBaseUrl?: string;
 	pasteApiUrl?: string;
 	prMetadata?: PRMetadata;
+	/** Specialized browser mode for local workflows that reuse the review UI. */
+	reviewMode?: "rebase";
 	/** Working directory for agent processes (e.g., --local worktree). Independent of diff pipeline. */
 	agentCwd?: string;
 	/** Per-PR worktree pool. When set, pr-switch creates worktrees instead of checking out. */
@@ -484,6 +486,7 @@ export async function startReviewServer(options: {
 				gitContext: hasLocalAccess ? options.gitContext : undefined,
 				sharingEnabled,
 				shareBaseUrl,
+				...(options.reviewMode && { reviewMode: options.reviewMode }),
 				pasteApiUrl,
 				repoInfo,
 				isWSL: wslFlag,
