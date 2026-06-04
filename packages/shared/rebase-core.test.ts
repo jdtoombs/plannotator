@@ -34,9 +34,10 @@ describe("getRebaseState", () => {
     const state = await getRebaseState(runtime({
       git: {
         "rev-parse --git-dir": { stdout: ".git\n" },
+        "rev-parse --show-toplevel": { stdout: "/repo\n" },
         "status --porcelain": { stdout: "UU src/app.ts\nM  package.json\n M README.md\n?? scratch.txt\n" },
         "diff --name-only --diff-filter=U": { stdout: "src/app.ts\n" },
-        "diff HEAD --diff-filter=U": { stdout: "diff --git a/src/app.ts b/src/app.ts\n" },
+        "diff HEAD -- src/app.ts": { stdout: "diff --git a/src/app.ts b/src/app.ts\n" },
         "rebase --show-current-patch": { stdout: "From abc123 Mon Sep 17 00:00:00 2001\nSubject: demo\n" },
         "log -1 --pretty=%s REBASE_HEAD": { stdout: "demo commit\n" },
       },

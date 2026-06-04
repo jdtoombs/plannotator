@@ -114,6 +114,13 @@ async function getGitDir(runtime: RebaseRuntime, cwd?: string): Promise<string |
   return resolvePath(cwd ?? process.cwd(), gitDir);
 }
 
+async function getGitTopLevel(runtime: RebaseRuntime, cwd?: string): Promise<string | undefined> {
+  const result = await runtime.runGit(["rev-parse", "--show-toplevel"], { cwd });
+  if (result.exitCode !== 0) return undefined;
+
+  return result.stdout.trim() || undefined;
+}
+
 async function tryGit(runtime: RebaseRuntime, args: string[], cwd?: string): Promise<string> {
   const result = await runtime.runGit(args, { cwd });
   return result.exitCode === 0 ? result.stdout : "";
@@ -138,14 +145,18 @@ export async function getRebaseState(runtime: RebaseRuntime, cwd?: string): Prom
   }
 
   const rebaseDir = resolvePath(gitDir, mode === "merge" ? "rebase-merge" : "rebase-apply");
-  const [status, unmerged, conflictPatch, currentPatch, todoContent, doneContent] = await Promise.all([
-    tryGit(runtime, ["status", "--porcelain"], cwd),
-    tryGit(runtime, ["diff", "--name-only", "--diff-filter=U"], cwd),
-    tryGit(runtime, ["diff", "HEAD", "--diff-filter=U"], cwd),
-    tryGit(runtime, ["rebase", "--show-current-patch"], cwd),
+  const gitCwd = await getGitTopLevel(runtime, cwd) ?? cwd;
+  const [status, unmerged, currentPatch, todoContent, doneContent] = await Promise.all([
+    tryGit(runtime, ["status", "--porcelain"], gitCwd),
+    tryGit(runtime, ["diff", "--name-only", "--diff-filter=U"], gitCwd),
+    tryGit(runtime, ["rebase", "--show-current-patch"], gitCwd),
     runtime.readTextFile(resolvePath(rebaseDir, "git-rebase-todo")),
     runtime.readTextFile(resolvePath(rebaseDir, "done")),
   ]);
+  const unmergedFiles = unmerged.split(/\r?\n/).filter(Boolean);
+  const conflictPatch = unmergedFiles.length > 0
+    ? await tryGit(runtime, ["diff", "HEAD", "--", ...unmergedFiles], gitCwd)
+    : "";
 
   const currentCommit =
     (await readGitFile(runtime, gitDir, "REBASE_HEAD")) ??
@@ -157,10 +168,10 @@ export async function getRebaseState(runtime: RebaseRuntime, cwd?: string): Prom
     gitDir,
     mode,
     currentCommit,
-    currentSubject: firstLine(await tryGit(runtime, ["log", "-1", "--pretty=%s", "REBASE_HEAD"], cwd)),
+    currentSubject: firstLine(await tryGit(runtime, ["log", "-1", "--pretty=%s", "REBASE_HEAD"], gitCwd)),
     onto: await readGitFile(runtime, rebaseDir, "onto"),
     branch: (await readGitFile(runtime, rebaseDir, "head-name"))?.replace(/^refs\/heads\//, ""),
-    unmergedFiles: unmerged.split(/\r?\n/).filter(Boolean),
+    unmergedFiles,
     ...parsePorcelain(status),
     todo: parseTodo(todoContent),
     done: parseTodo(doneContent),
