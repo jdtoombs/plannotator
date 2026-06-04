@@ -26,6 +26,7 @@ import {
 import { parseRemoteUrl } from "./generated/repo.js";
 import { fetchRef, createWorktree, removeWorktree, ensureObjectAvailable } from "./generated/worktree.js";
 import { loadConfig, resolveDefaultDiffType } from "./generated/config.js";
+import { getRebaseState, type RebaseState } from "./generated/rebase-core.js";
 export { getLastAssistantMessageText } from "./assistant-message.js";
 
 export type AnnotateMode = "annotate" | "annotate-folder" | "annotate-last";
@@ -200,6 +201,58 @@ export async function openCodeReview(
 ): Promise<{ approved: boolean; feedback?: string; annotations?: unknown[]; agentSwitch?: string; exit?: boolean }> {
 	const session = await startCodeReviewBrowserSession(ctx, options);
 	return session.waitForDecision();
+}
+
+export interface RebaseReviewBrowserSession extends BrowserDecisionSession<{
+	approved: boolean;
+	feedback?: string;
+	annotations?: unknown[];
+	agentSwitch?: string;
+	exit?: boolean;
+}> {
+	state: RebaseState;
+}
+
+export async function startRebaseReviewBrowserSession(
+	ctx: ExtensionContext,
+	options: { cwd?: string } = {},
+): Promise<RebaseReviewBrowserSession> {
+	if (!ctx.hasUI || !reviewHtmlContent) {
+		throw new Error("Plannotator rebase review browser is unavailable in this session.");
+	}
+
+	const cwd = options.cwd ?? ctx.cwd;
+	const state = await getRebaseState(reviewRuntime, cwd);
+	if (!state.inProgress) {
+		throw new Error("No git rebase is currently in progress.");
+	}
+	if (state.unmergedFiles.length === 0) {
+		throw new Error("A rebase is in progress, but there are no unresolved conflict files.");
+	}
+
+	const rawPatch = state.conflictPatch || state.currentPatch || "";
+	if (!rawPatch.trim()) {
+		throw new Error("No conflict diff is available for the current rebase state.");
+	}
+
+	const current = state.currentCommit?.slice(0, 12) ?? "unknown";
+	const server = await startReviewServer({
+		rawPatch,
+		gitRef: `rebase conflict ${current}`,
+		diffType: "uncommitted",
+		gitContext: undefined,
+		agentCwd: cwd,
+		htmlContent: reviewHtmlContent,
+		origin: "pi",
+		sharingEnabled: process.env.PLANNOTATOR_SHARE !== "disabled",
+		shareBaseUrl: process.env.PLANNOTATOR_SHARE_URL || undefined,
+		pasteApiUrl: process.env.PLANNOTATOR_PASTE_URL || undefined,
+	});
+
+	return {
+		...startBrowserDecisionSession(server, ctx, server.waitForDecision),
+		state,
+	};
 }
 
 export async function startCodeReviewBrowserSession(

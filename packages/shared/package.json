@@ -9,6 +9,7 @@
     "./feedback-templates": "./feedback-templates.ts",
     "./jj-core": "./jj-core.ts",
     "./review-core": "./review-core.ts",
+    "./rebase-core": "./rebase-core.ts",
     "./review-args": "./review-args.ts",
     "./vcs-core": "./vcs-core.ts",
     "./checklist": "./checklist.ts",

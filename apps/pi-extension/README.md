@@ -170,6 +170,10 @@ Plan review is asynchronous:
 
 The other shared actions remain request/response flows. Payloads are intentionally minimal and only include fields the shared implementation actually uses.
 
+### Rebase conflict review
+
+Run `/plannotator-rebase` while Git is paused during a rebase conflict. Plannotator opens the conflicted diff in the code review UI so you can annotate hunks and send structured rebase-resolution guidance back to the agent. The command does not continue the rebase automatically; the agent is instructed to ask before running `git rebase --continue`.
+
 ### Markdown annotation
 
 Run `/plannotator-annotate <file.md>` to open any markdown file in the annotation UI. Useful for reviewing documentation or design specs with the agent.
@@ -193,6 +197,7 @@ During execution, the agent marks completed steps with `[DONE:n]` markers. Progr
 | `/plannotator` | Toggle plan mode. The agent writes a markdown plan file anywhere in the working directory and submits its path |
 | `/plannotator-status` | Show current phase, plan file, and progress |
 | `/plannotator-review` | Open code review UI for current changes |
+| `/plannotator-rebase` | Open review UI for the current paused rebase conflict state |
 | `/plannotator-annotate <file>` | Open markdown file in annotation UI |
 | `/plannotator-last` | Annotate the last assistant message |
 

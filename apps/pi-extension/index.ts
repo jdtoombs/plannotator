@@ -51,6 +51,7 @@ import {
 	getAnnotateMessageFeedbackPrompt,
 } from "./generated/prompts.js";
 import { parseAnnotateArgs } from "./generated/annotate-args.js";
+import { formatRebaseFeedbackPrompt } from "./generated/rebase-core.js";
 import { parseReviewArgs } from "./generated/review-args.js";
 import { resolveAtReference } from "./generated/at-reference.js";
 import {
@@ -59,6 +60,7 @@ import {
 	getStartupErrorMessage,
 	openArchiveBrowserAction,
 	startCodeReviewBrowserSession,
+	startRebaseReviewBrowserSession,
 	startLastMessageAnnotationSession,
 	startMarkdownAnnotationSession,
 	openPlanReviewBrowser,
@@ -482,6 +484,68 @@ export default function plannotator(pi: ExtensionAPI): void {
 			} catch (err) {
 				ctx.ui.notify(
 					`Failed to start code review UI: ${getStartupErrorMessage(err)}`,
+					"error",
+				);
+			}
+		},
+	});
+
+	pi.registerCommand("plannotator-rebase", {
+		description: "Open interactive review for the current rebase conflict state",
+		handler: async (_args, ctx) => {
+			if (!hasReviewBrowserHtml()) {
+				ctx.ui.notify(
+					"Rebase review UI not available. Run 'bun run build' in the pi-extension directory.",
+					"error",
+				);
+				return;
+			}
+
+			currentPiSession.update(ctx);
+			const origin = getPiSessionIdentity(ctx);
+
+			try {
+				const session = await startRebaseReviewBrowserSession(ctx);
+				ctx.ui.notify("Rebase conflict review opened. You can keep chatting while it runs.", "info");
+				void session
+					.waitForDecision()
+					.then((result) => {
+						try {
+							if (result.exit) {
+								safeNotify(ctx, "Rebase review session closed.", "info", origin);
+								return;
+							}
+							if (result.approved) {
+								sendUserMessageWithCurrentSessionFallback(
+									pi,
+									"The user approved the current rebase conflict review. Confirm the working tree is clean and ask before running `git rebase --continue`.",
+									{ deliverAs: "followUp" },
+									"Plannotator rebase review feedback could not be sent",
+									origin,
+								);
+								return;
+							}
+							if (!result.feedback) {
+								safeNotify(ctx, "Rebase review closed (no feedback).", "info", origin);
+								return;
+							}
+							sendUserMessageWithCurrentSessionFallback(
+								pi,
+								formatRebaseFeedbackPrompt(result.feedback, session.state),
+								{ deliverAs: "followUp" },
+								"Plannotator rebase review feedback could not be sent",
+								origin,
+							);
+						} catch (err) {
+							reportBackgroundError(ctx, "Plannotator rebase review feedback could not be sent", err, origin);
+						}
+					})
+					.catch((err) => {
+						reportBackgroundError(ctx, "Plannotator rebase review session failed", err, origin);
+					});
+			} catch (err) {
+				ctx.ui.notify(
+					`Failed to start rebase review UI: ${getStartupErrorMessage(err)}`,
 					"error",
 				);
 			}
