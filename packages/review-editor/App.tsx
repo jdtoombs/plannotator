@@ -2262,6 +2262,8 @@ const ReviewApp: React.FC = () => {
                 conflicts={rebaseConflicts}
                 decisions={rebaseDecisions}
                 onDecisionChange={handleRebaseDecisionChange}
+                onSubmit={handleSendFeedback}
+                isSubmitting={isSendingFeedback}
               />
             ) : files.length > 0 ? (
               <DockviewReact

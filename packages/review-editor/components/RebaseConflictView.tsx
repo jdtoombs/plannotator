@@ -21,6 +21,8 @@ interface RebaseConflictViewProps {
   conflicts: RebaseConflictBlock[];
   decisions: Record<string, RebaseConflictDecision>;
   onDecisionChange: (conflictId: string, decision: RebaseConflictDecision) => void;
+  onSubmit: () => void;
+  isSubmitting?: boolean;
 }
 
 function stripPatchLine(line: string): string {
@@ -125,7 +127,10 @@ function CodeBlock({ label, lines, selected }: { label: string; lines: string[];
   );
 }
 
-export function RebaseConflictView({ conflicts, decisions, onDecisionChange }: RebaseConflictViewProps) {
+export function RebaseConflictView({ conflicts, decisions, onDecisionChange, onSubmit, isSubmitting }: RebaseConflictViewProps) {
+  const selectedCount = Object.keys(decisions).length;
+  const allSelected = selectedCount === conflicts.length && conflicts.length > 0;
+
   if (conflicts.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
@@ -137,11 +142,23 @@ export function RebaseConflictView({ conflicts, decisions, onDecisionChange }: R
   return (
     <div className="h-full overflow-auto bg-background">
       <div className="max-w-5xl mx-auto px-6 py-5 space-y-5">
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <h2 className="text-base font-semibold text-foreground">Rebase conflict review</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Pick the side to keep for each conflict. These choices are sent to the agent as guidance; Plannotator will not edit files or continue the rebase automatically.
-          </p>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Rebase conflict review</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Pick the side to keep for each conflict. These choices are sent to the agent as guidance; Plannotator will not edit files or continue the rebase automatically.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">{selectedCount}/{conflicts.length} conflicts selected</p>
+          </div>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={selectedCount === 0 || isSubmitting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={allSelected ? 'Send all conflict choices to the agent' : 'You can send a partial set of choices, or finish selecting all conflicts first'}
+          >
+            {isSubmitting ? 'Sending…' : allSelected ? '✅ Confirm choices' : `Send ${selectedCount || ''} choice${selectedCount === 1 ? '' : 's'}`}
+          </button>
         </div>
 
         {conflicts.map((conflict) => {
@@ -190,6 +207,18 @@ export function RebaseConflictView({ conflicts, decisions, onDecisionChange }: R
             </section>
           );
         })}
+
+        <div className="sticky bottom-4 rounded-xl border border-border bg-card/95 backdrop-blur p-3 shadow-lg flex items-center justify-between gap-3">
+          <span className="text-sm text-muted-foreground">{selectedCount}/{conflicts.length} conflicts selected</span>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={selectedCount === 0 || isSubmitting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-primary text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? 'Sending…' : '✅ Confirm choices'}
+          </button>
+        </div>
       </div>
     </div>
   );
